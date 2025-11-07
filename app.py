@@ -13,6 +13,7 @@ import zipfile
 import os
 from PIL import Image
 import pandas as pd
+import time
 
 # ======================================================
 # Branding & Theme Setup
@@ -166,7 +167,7 @@ with col2:
     """)
 
 # ======================================================
-# Split-View Functional Evolution
+# Split-View Functional Evolution (with Time Factor)
 # ======================================================
 if st.button("🚀 Run Split-View Evolution"):
     func = functions[func_name]
@@ -185,9 +186,12 @@ if st.button("🚀 Run Split-View Evolution"):
         opts = {p: torch.optim.Adam(models[p].parameters(), lr=lr) for p in pooling_modes}
         criterion = nn.MSELoss()
         losses = {p: [] for p in pooling_modes}
+        times = {p: 0.0 for p in pooling_modes}
 
         for epoch in range(epochs):
             for pooling in pooling_modes:
+                start_time = time.time()
+
                 model = models[pooling]
                 optimizer = opts[pooling]
                 optimizer.zero_grad()
@@ -195,15 +199,17 @@ if st.button("🚀 Run Split-View Evolution"):
                 loss = criterion(pred, Y)
                 loss.backward()
                 optimizer.step()
+
+                end_time = time.time()
+                times[pooling] += (end_time - start_time)
                 losses[pooling].append(loss.item())
 
-            # Update live plots every few epochs
+            # Live animation update
             if epoch % max(epochs // 20, 1) == 0:
                 for idx, pooling in enumerate(pooling_modes):
                     model = models[pooling]
                     y_pred = model(X).detach().cpu().numpy()
 
-                    # Compact plot
                     plt.rcParams.update({
                         "font.size": 8,
                         "axes.titlesize": 9,
@@ -226,31 +232,44 @@ if st.button("🚀 Run Split-View Evolution"):
 
             progress.progress((epoch + 1) / epochs)
 
-        # After training: compute metrics
+        # After training: compute metrics + time
         for pooling in pooling_modes:
             model = models[pooling]
             y_pred = model(X).detach().cpu().numpy()
             metrics = compute_metrics(X, Y, y_pred)
+            metrics["Time (s)"] = round(times[pooling], 3)
+            metrics["Efficiency"] = metrics["Smoothness"] / (metrics["MSE"] * (1 + metrics["Time (s)"]))
             metrics_results.append({"Pooling": pooling, **metrics})
             np.save(os.path.join(tmpdir, f"{pooling}_pred.npy"), y_pred)
             np.save(os.path.join(tmpdir, f"{pooling}_loss.npy"), np.array(losses[pooling]))
 
         df = pd.DataFrame(metrics_results).sort_values(by="MSE")
-        st.subheader("📊 Functional Metrics Summary")
-        st.dataframe(df.style.format({
+        st.subheader("📊 Functional Metrics Summary (with Time)")
+
+        # Adaptive table styling
+        styled = df.style.format({
             "MSE": "{:.3e}",
             "Curvature Energy": "{:.3e}",
             "Smoothness": "{:.4f}",
-            "Stability": "{:.4f}"
-        }))
+            "Stability": "{:.4f}",
+            "Time (s)": "{:.2f}",
+            "Efficiency": "{:.2e}",
+        })
+
+        if theme_choice == "Dark":
+            styled = styled.set_properties(**{"color": "#ffffff", "background-color": "#0e1117"})
+        else:
+            styled = styled.set_properties(**{"color": "#000000", "background-color": "#ffffff"})
+
+        st.dataframe(styled)
 
         # Download zip
-        zip_path = os.path.join(tmpdir, f"{func_name}_LearnKAN_SplitView.zip")
+        zip_path = os.path.join(tmpdir, f"{func_name}_LearnKAN_SplitView_Timed.zip")
         with zipfile.ZipFile(zip_path, "w") as zipf:
             for file in os.listdir(tmpdir):
                 zipf.write(os.path.join(tmpdir, file), file)
         with open(zip_path, "rb") as f:
-            st.download_button("📥 Download Split-View Experiment Bundle", f.read(), f"{func_name}_LearnKAN_SplitView.zip", mime="application/zip")
+            st.download_button("📥 Download Timed Experiment Bundle", f.read(), f"{func_name}_LearnKAN_SplitView_Timed.zip", mime="application/zip")
 
 st.markdown("---")
-st.markdown("💡 *Tip:* Run up to 3 pooling strategies side by side to visually compare their functional learning dynamics in real time.*")
+st.markdown("💡 *Tip:* Compare both accuracy (MSE) and efficiency (Smoothness ÷ MSE ÷ Time) to see which pooling performs better under time constraints.*")
