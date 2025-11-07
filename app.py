@@ -68,35 +68,65 @@ def generate_data(func, n=400):
 # ======================================================
 # Pooling Operator
 # ======================================================
+# ======================================================
+# Enhanced Pooling Operator (with Hierarchical Pooling)
+# ======================================================
 class PoolingOperator(nn.Module):
     def __init__(self, pooling_type, input_dim=64):
         super().__init__()
         self.pooling_type = pooling_type
+        self.input_dim = input_dim
+
         if pooling_type == "parametric":
             self.alpha = nn.Parameter(torch.ones(1, input_dim))
         elif pooling_type == "attention":
             self.attn = nn.Linear(input_dim, 1)
         elif pooling_type == "spline_weighted":
             self.weight = nn.Parameter(torch.linspace(0.1, 1.0, input_dim))
+        elif pooling_type == "hierarchical":
+            # Progressive layer compression using learned gates
+            self.levels = int(np.log2(input_dim))  # e.g., 64 → 6 levels
+            self.gates = nn.ParameterList([
+                nn.Parameter(torch.randn(1, input_dim // (2 ** (i + 1)))) for i in range(self.levels)
+            ])
 
     def forward(self, x):
         if self.pooling_type == "mean":
             return x.mean(dim=1, keepdim=True)
+
         elif self.pooling_type == "max":
             return x.max(dim=1, keepdim=True)[0]
+
         elif self.pooling_type == "min":
             return x.min(dim=1, keepdim=True)[0]
+
         elif self.pooling_type == "integral":
             return torch.trapz(x, dim=1, keepdim=True)
+
         elif self.pooling_type == "spline_weighted":
-            return (x * self.weight).sum(dim=1, keepdim=True) / self.weight.sum()
+            weighted_sum = (x * self.weight).sum(dim=1, keepdim=True)
+            return weighted_sum / self.weight.sum()
+
         elif self.pooling_type == "parametric":
             return (x * torch.sigmoid(self.alpha)).mean(dim=1, keepdim=True)
+
         elif self.pooling_type == "attention":
             attn_weights = torch.softmax(self.attn(x), dim=1)
             return (attn_weights * x).sum(dim=1, keepdim=True)
+
+        elif self.pooling_type == "hierarchical":
+            # Recursive local pooling at multiple scales
+            h = x
+            for gate in self.gates:
+                # Chunk the input into pairs and average locally
+                h = h.view(h.shape[0], -1, 2).mean(dim=2)
+                # Apply learned gating to emphasize certain groups
+                h = h * torch.sigmoid(gate)
+            return h.mean(dim=1, keepdim=True)
+
         else:
             raise ValueError(f"Unknown pooling type: {self.pooling_type}")
+
 
 # ======================================================
 # LearnKAN Model
@@ -153,7 +183,7 @@ with col1:
     func_name = st.selectbox("Select Function:", list(functions.keys()))
     pooling_modes = st.multiselect(
         "Select Pooling Strategies (up to 3 for side-by-side view):",
-        ["mean", "spline_weighted", "attention", "parametric", "max", "min", "integral"],
+        ["mean", "spline_weighted", "attention", "parametric", "max", "min", "integral", "hierarchical"],
         default=["mean", "spline_weighted", "attention"],
     )
     epochs = st.slider("Training Epochs:", 100, 1000, 300, 50)
@@ -164,7 +194,9 @@ with col2:
     - 🟦 **Pointwise:** mean, max, min  
     - 🟩 **Global functional:** integral, spline-weighted  
     - 🟧 **Adaptive:** parametric, attention  
+    - 🟨 **Hierarchical:** progressive feature aggregation  
     """)
+
 
 # ======================================================
 # Split-View Functional Evolution (with Time Factor)
