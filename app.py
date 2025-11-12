@@ -201,7 +201,7 @@ with col2:
 # ======================================================
 # Split-View Functional Evolution (with Time Factor)
 # ======================================================
-if st.button("🚀 Run Split-View Evolution"):
+if st.button("Run Split-View Evolution"):
     func = functions[func_name]
     X, Y = generate_data(func)
     X, Y = X.to(device), Y.to(device)
@@ -276,7 +276,7 @@ if st.button("🚀 Run Split-View Evolution"):
             np.save(os.path.join(tmpdir, f"{pooling}_loss.npy"), np.array(losses[pooling]))
 
         df = pd.DataFrame(metrics_results).sort_values(by="MSE")
-        st.subheader("📊 Functional Metrics Summary (with Time)")
+        st.subheader("Functional Metrics Summary (with Time)")
 
         # Adaptive table styling
         styled = df.style.format({
@@ -301,7 +301,7 @@ if st.button("🚀 Run Split-View Evolution"):
             for file in os.listdir(tmpdir):
                 zipf.write(os.path.join(tmpdir, file), file)
         with open(zip_path, "rb") as f:
-            st.download_button("📥 Download Timed Experiment Bundle", f.read(), f"{func_name}_LearnKAN_SplitView_Timed.zip", mime="application/zip")
+            st.download_button("Download Timed Experiment Bundle", f.read(), f"{func_name}_LearnKAN_SplitView_Timed.zip", mime="application/zip")
 
 st.markdown("---")
 st.markdown("💡 *Tip:* Compare both accuracy (MSE) and efficiency (Smoothness ÷ MSE ÷ Time) to see which pooling performs better under time constraints.*")
